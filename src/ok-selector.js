@@ -1,7 +1,5 @@
 'use strict';
 
-import { Map, List } from 'immutable';
-
 const BASE = 10;
 const DOT = '.';
 const ID = ':';
@@ -11,7 +9,6 @@ const AllChildren = '*.';
 const splitHistory = {};
 
 const isInString = (string, toFind) => string.indexOf(toFind) !== -1;
-const isImmutable = (node) => Map.isMap(node) || List.isList(node);
 
 function splitString (path) {
   if (splitHistory[path] === undefined) {
@@ -21,31 +18,16 @@ function splitString (path) {
   return splitHistory[path];
 }
 
-function getFromJSON (node, path) {
-  const parts = splitString(path);
-  let ref = node;
-
-  for (let i = 0; i < parts.length; i += 1) {
-    if (ref[parts[i]] === undefined) {
-      return undefined;
-    }
-
-    ref = ref[parts[i]];
-  }
-
-  return ref;
-}
-
 function getFromImmutable (node, path) {
   return node !== undefined ? node.getIn(splitString(path)) : node;
 }
 
-function findObject (node, path, id) {
-  return getFromJSON(node, path).find((element) => element.id === id);
-}
-
 function findImmutable (node, path, id) {
-  return getFromImmutable(node, path).find((x) => x.get('id') === id);
+  const array = getFromImmutable(node, path);
+  if (!array) {
+    return undefined;
+  }
+  return array.find((x) => x.get('id') === id);
 }
 
 function getArrayById (node, key, findNode, read) {
@@ -57,6 +39,10 @@ function getArrayById (node, key, findNode, read) {
     const subPath = suffix.replace(/^[0-9]+\./, '');
 
     const child = findNode(node, path, id);
+    if (!child) {
+      console.warn(`The path reference by ${key} could not be found.`);
+      return undefined;
+    }
     return read(child, subPath);
   }
 
@@ -64,14 +50,13 @@ function getArrayById (node, key, findNode, read) {
   return findNode(node, path, id);
 }
 
-let readFromImmutable;
-let readFromJSON;
-function mapObjectChildren (node, path, suffix) {
-  return getFromJSON(node, path).map((child) => readFromJSON(child, suffix));
-}
-
+let read;
 function mapImmutableChildren (node, path, suffix) {
-  return getFromImmutable(node, path).map((child) => readFromImmutable(child, suffix));
+  const obj = getFromImmutable(node, path);
+  if (!obj) {
+    return undefined;
+  }
+  return obj.map((child) => read(child, suffix));
 }
 
 function getChildren (node, key, mapChildren) {
@@ -81,19 +66,9 @@ function getChildren (node, key, mapChildren) {
   return mapChildren(node, path, suffix);
 }
 
-readFromJSON = (node, key) => {
+read = (node, key) => {
   if (isInString(key, ID)) {
-    return getArrayById(node, key, findObject, readFromJSON);
-  } else if (isInString(key, ALL)) {
-    return getChildren(node, key, mapObjectChildren);
-  }
-
-  return getFromJSON(node, key);
-};
-
-readFromImmutable = (node, key) => {
-  if (isInString(key, ID)) {
-    return getArrayById(node, key, findImmutable, readFromImmutable);
+    return getArrayById(node, key, findImmutable, read);
   } else if (isInString(key, ALL)) {
     return getChildren(node, key, mapImmutableChildren);
   }
@@ -101,11 +76,7 @@ readFromImmutable = (node, key) => {
   return getFromImmutable(node, key);
 };
 
-export default function read (node, key) {
-  return isImmutable(node) ? readFromImmutable(node, key) : readFromJSON(node, key);
-}
+export const has = (node, key) => read(node, key) !== undefined;
+export const unwrap = (node, key) => read(node, key).toJS();
 
-export const unwrap = (node, key) => {
-  const value = read(node, key);
-  return isImmutable(value) ? value.toJS() : value;
-}
+export default read;
