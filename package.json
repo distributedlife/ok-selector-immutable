@@ -1,6 +1,6 @@
 {
   "name": "ok-selector-immutable",
-  "version": "1.1.0",
+  "version": "1.0.0",
   "description": "Pluck values from an ImmutableJS object using selector strings.",
   "main": "dist/ok-selector.js",
   "scripts": {
